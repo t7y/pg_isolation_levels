@@ -63,7 +63,9 @@ UPDATE doctors SET on_call = false WHERE id = 2;
 -- below, depending on what SSI's dependency tracker decides. Either
 -- way, this transaction must roll back and retry.
 COMMIT;
-
+-- ERROR:  could not serialize access due to read/write dependencies among transactions
+-- DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.
+-- HINT:  The transaction might succeed if retried.
 
 -- =====================================================================
 -- SESSION 2 -- STEP 5: retry. Now the snapshot reflects reality.

@@ -60,6 +60,7 @@ Work through the files in order. For each one, open it in your editor, then copy
 | 3 | `sql/03_write_skew.sql` | Repeatable Read | Write skew — two transactions read overlapping data and write disjoint rows, violating a multi-row invariant (the "doctors on call" problem). RR can't catch this. |
 | 4 | `sql/04_serializable.sql` | Serializable | SSI detects the read/write dependency cycle from demo 3 and aborts the second transaction with `40001`. The invariant is preserved. |
 | 5 | `sql/05_for_update.sql` | Read Committed | `SELECT ... FOR UPDATE` as an escape hatch — pessimistic row locking serializes access without bumping up to Serializable. |
+| 6 | `sql/06_balance_transfer.sql` | Read Committed | Lost update on a balance transfer — the read-compute-write pattern silently drops a transaction. Part B shows the `FOR UPDATE` fix. |
 
 ### Example: running demo 1
 
