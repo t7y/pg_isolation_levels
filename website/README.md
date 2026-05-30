@@ -45,4 +45,18 @@ This site documents the same content as the `sql/` demo files and `lessons/*/SCR
 
 ## Deployment
 
-Out of scope for local use, but the static `out/` directory deploys to any static host. For Vercel: set the root directory to `website`, build command `npm run build`, output directory `out`.
+The site auto-deploys to GitHub Pages on every push to `main` via
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml). The workflow builds from this
+`website/` directory (`npm ci && npm run build`, which also runs the Pagefind index step) and
+publishes the static `out/` directory.
+
+Live URL: <https://t7y.github.io/pg_isolation_levels/>
+
+Because it deploys as a GitHub *project page* under `/pg_isolation_levels`, `next.config.mjs` sets a
+production-only `basePath`/`assetPrefix` of `/pg_isolation_levels` and `trailingSlash: true`. The
+empty `public/.nojekyll` file keeps GitHub Pages from stripping the `_next/` directory.
+
+One-time setup: in the repo's **Settings → Pages → Source**, select **GitHub Actions**.
+
+The static `out/` directory also deploys to any other static host. For Vercel: set the root directory
+to `website`, build command `npm run build`, output directory `out` (and drop the `basePath`).

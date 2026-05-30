@@ -1,5 +1,8 @@
 import nextra from 'nextra'
 
+const isProd = process.env.NODE_ENV === 'production'
+const repo = 'pg_isolation_levels'
+
 const withNextra = nextra({
   theme: 'nextra-theme-docs',
   themeConfig: './theme.config.tsx',
@@ -9,7 +12,10 @@ const withNextra = nextra({
 /** @type {import('next').NextConfig} */
 const config = {
   output: 'export',        // static export for Pagefind
-  images: { unoptimized: true }
+  images: { unoptimized: true },
+  basePath: isProd ? `/${repo}` : '',
+  assetPrefix: isProd ? `/${repo}/` : '',
+  trailingSlash: true      // helps GitHub Pages serve /foo/ correctly
 }
 
 export default withNextra(config)
