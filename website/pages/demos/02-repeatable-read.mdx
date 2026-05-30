@@ -1,0 +1,77 @@
+---
+title: "Demo 2: Repeatable Read"
+description: Snapshot isolation gives a stable view, but writing a concurrently-modified row raises SQLSTATE 40001.
+---
+
+# Demo 2: Repeatable Read — Stable Snapshot & SQLSTATE 40001
+
+**Isolation level:** Repeatable Read
+**Source:** `sql/02_repeatable_read.sql`
+**Interactive version:** `/start-2`
+
+## Two things to learn
+
+1. **REPEATABLE READ** gives every statement in a transaction the **same snapshot**, taken at the first statement. Concurrent commits are invisible — no more non-repeatable reads.
+2. But if you `UPDATE` a row that a concurrent transaction already committed a change to, Postgres refuses with `SQLSTATE 40001` and you must retry the whole transaction.
+
+## Setup
+
+```bash
+./scripts/reset.sh
+```
+
+## Walkthrough
+
+### Session 1 — open RR and take a snapshot
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 100
+```
+
+### Session 2 — update and commit
+
+```sql
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE counters SET value = 200 WHERE name = 'widgets';
+COMMIT;
+```
+
+### Session 1 — re-read: snapshot holds
+
+```sql
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 100  <- snapshot isolation: still the value as of the first read
+```
+
+Contrast with demo 1, where this flipped to `200`.
+
+### Session 1 — try to UPDATE
+
+```sql
+UPDATE counters SET value = value + 1 WHERE name = 'widgets';
+-- EXPECT: ERROR  could not serialize access due to concurrent update
+--         SQLSTATE 40001
+ROLLBACK;
+```
+
+Postgres can't safely apply the write on top of a stale snapshot, so it aborts. The only legal next move is `ROLLBACK`.
+
+### Session 1 — retry, now seeing fresh data
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 200
+UPDATE counters SET value = value + 1 WHERE name = 'widgets';
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 201
+COMMIT;
+```
+
+## Takeaway
+
+Repeatable Read is great for read-mostly logic that needs a consistent view. But once you mix in writes, your application **must** catch `SQLSTATE 40001` and retry the whole transaction — there's no fixing it up in place. The snapshot is dead the moment `40001` fires.
+
+It still doesn't prevent every anomaly, though. Next: [write skew](/demos/03-write-skew).

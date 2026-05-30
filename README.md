@@ -2,6 +2,14 @@
 
 A hands-on sandbox for exploring PostgreSQL transaction isolation levels with two `psql` sessions side by side.
 
+## Three ways to use this lab
+
+- **Option A — Manual:** bring the environment up yourself and copy-paste from the `sql/` files. This README walks you through it.
+- **Option B — Guided interactive walkthrough (in Cursor):** open this folder in Cursor and type `/start-setup`, then `/start-1` … `/start-6`. An AI instructor walks you through setup and each two-session demo step by step, waiting for you at each point. See [Guided walkthrough](#guided-walkthrough-in-cursor).
+- **Option C — Reference website:** a browsable, searchable handbook of the same material lives in [`website/`](website/) (Nextra). See [Reference website](#reference-website-nextra).
+
+> Tip: most common tasks are wrapped in the [`Makefile`](Makefile). Run `make help` to list them.
+
 ## Prerequisites
 
 - Docker & Docker Compose
@@ -96,6 +104,74 @@ Work through the files in order. For each one, open it in your editor, then copy
    ```
 
 Every other demo follows the same pattern: read the file, reset, paste each step into the right session.
+
+## Guided walkthrough (in Cursor)
+
+Prefer to be walked through it? Open this folder in [Cursor](https://cursor.com) and let the built-in AI instructor guide you. The interactive layer lives in `.cursor/` (an always-on instructor rule + slash commands) and `lessons/` (the teaching scripts).
+
+1. Open the folder in Cursor.
+2. In the chat/Composer pane, type `/start-setup` and press Enter. The instructor brings up Postgres and helps you open your two `psql` sessions.
+3. Then run the demos in order:
+
+| Command | Demo | What it shows |
+|---|---|---|
+| `/start-setup` | Setup | Docker up + two `psql` sessions + schema/seed |
+| `/start-1` | Read Committed | Non-repeatable reads |
+| `/start-2` | Repeatable Read | Snapshot isolation + `SQLSTATE 40001` on write conflict |
+| `/start-3` | Write skew | Repeatable Read can't catch it |
+| `/start-4` | Serializable | SSI catches the write-skew cycle |
+| `/start-5` | `FOR UPDATE` | Pessimistic locking escape hatch |
+| `/start-6` | Balance transfer | Stale-validation race + the `FOR UPDATE` fix |
+
+You still run the SQL yourself in your two terminals (the instructor can't hold interactive sessions open) — it tells you exactly what to paste where, then waits for you to report what you saw.
+
+## Reference website (Nextra)
+
+A browsable, searchable handbook of the same demos lives in [`website/`](website/). It's a static [Nextra](https://nextra.site) site (Next.js + Pagefind full-text search) — the "look it up later" companion to the hands-on demos.
+
+**Prerequisites:** Node.js 18+ and npm.
+
+```bash
+cd website
+npm install      # first time only
+npm run dev      # start the dev server
+```
+
+Then open **http://localhost:3000**.
+
+To build the static site (output lands in `website/out/`, with the Pagefind search index generated automatically afterward):
+
+```bash
+cd website
+npm run build
+npm run preview  # serve the built site locally
+```
+
+Or use the Makefile targets from the repo root:
+
+```bash
+make site-install   # install dependencies
+make site-dev       # dev server at http://localhost:3000
+make site-build     # static build + search index
+make site-preview   # serve the built site
+```
+
+## Make targets
+
+Common tasks are wrapped in the [`Makefile`](Makefile):
+
+```bash
+make help        # list all targets
+
+make up          # start PostgreSQL in Docker (creates .env if missing)
+make psql        # open a psql session (run in two terminals)
+make setup       # load schema + seed data (run once)
+make reset       # reset all demo tables to their baseline
+make logs        # follow PostgreSQL logs
+make down        # stop and remove the container + volume
+
+make site-install / site-dev / site-build / site-preview   # the Nextra website
+```
 
 ## Useful Commands
 

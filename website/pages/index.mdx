@@ -1,0 +1,45 @@
+---
+title: PostgreSQL Isolation Levels Lab
+description: A hands-on sandbox for exploring PostgreSQL transaction isolation levels and the concurrency anomalies each does and does not prevent.
+---
+
+# PostgreSQL Isolation Levels Lab
+
+A hands-on sandbox for watching PostgreSQL transaction isolation levels behave (and misbehave) across two `psql` sessions side by side. You run real interleaved transactions and see exactly when anomalies appear — and which isolation level or locking technique stops them.
+
+This site is the **reference handbook**. The hands-on material is six small SQL demos in the repo, each runnable cold.
+
+## Three ways to use the lab
+
+- **Manual** — bring up the environment and copy-paste from the `sql/` files. See [Environment Setup](/getting-started/setup).
+- **Guided (in Cursor)** — open the repo in [Cursor](https://cursor.com) and type `/start-setup`, then `/start-1` … `/start-6`. An AI instructor walks you through setup and each demo, waiting for you at each step.
+- **This website** — browse and search the demos as reference pages whenever you want to look something up.
+
+## What you'll explore
+
+Three isolation levels and the anomalies they address:
+
+| Level | Snapshot? | Stops non-repeatable reads? | Stops write skew? |
+|---|---|---|---|
+| **Read Committed** (default) | Per-statement | No | No |
+| **Repeatable Read** | Per-transaction | Yes | No |
+| **Serializable** (SSI) | Per-transaction + predicate tracking | Yes | Yes (aborts with `40001`) |
+
+Plus the pragmatic escape hatch: **`SELECT ... FOR UPDATE`** pessimistic row locking, which serializes access to hot rows without bumping isolation all the way to Serializable.
+
+## The demos
+
+| # | Demo | Isolation level | What it shows |
+|---|---|---|---|
+| 1 | [Read Committed](/demos/01-read-committed) | Read Committed | Non-repeatable reads — the same `SELECT` returns different values within one transaction. |
+| 2 | [Repeatable Read](/demos/02-repeatable-read) | Repeatable Read | A stable snapshot, but writing a concurrently-modified row raises `SQLSTATE 40001`. |
+| 3 | [Write Skew](/demos/03-write-skew) | Repeatable Read | Two transactions read overlapping data, write disjoint rows, and break a multi-row invariant. RR can't catch it. |
+| 4 | [Serializable](/demos/04-serializable) | Serializable | SSI detects the read/write dependency cycle from demo 3 and aborts one transaction with `40001`. |
+| 5 | [SELECT ... FOR UPDATE](/demos/05-for-update) | Read Committed | Pessimistic row locking serializes access without using Serializable. |
+| 6 | [Balance Transfer](/demos/06-balance-transfer) | Read Committed | A stale-validation race on a money transfer, and the `FOR UPDATE` fix. |
+
+## A recurring character: `SQLSTATE 40001`
+
+Two demos end with `ERROR: could not serialize access...` / `SQLSTATE 40001`. That is **not** a setup mistake — it's Postgres refusing to commit a transaction that would violate a serializable history. The correct application response is always to **retry the whole transaction**. The demos make this concrete.
+
+Start with the [Isolation Levels Primer](/getting-started/introduction), or jump straight to [Environment Setup](/getting-started/setup).

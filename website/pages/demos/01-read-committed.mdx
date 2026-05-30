@@ -1,0 +1,56 @@
+---
+title: "Demo 1: Read Committed"
+description: Non-repeatable reads under READ COMMITTED — the same SELECT returns different values within one transaction.
+---
+
+# Demo 1: Read Committed — Non-Repeatable Reads
+
+**Isolation level:** Read Committed (PostgreSQL's default)
+**Source:** `sql/01_read_committed.sql`
+**Interactive version:** `/start-1`
+
+## The anomaly
+
+Under READ COMMITTED, each *statement* sees its own fresh snapshot. If another transaction commits a change between two `SELECT`s, the second `SELECT` sees the new value — the same query inside the same transaction returns different rows. That's a **non-repeatable read**.
+
+## Setup
+
+Reset so `widgets` is back to 100:
+
+```bash
+./scripts/reset.sh
+```
+
+## Walkthrough
+
+### Session 1 — open a transaction and read
+
+```sql
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 100
+```
+
+Leave the transaction open.
+
+### Session 2 — update and commit
+
+```sql
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE counters SET value = 200 WHERE name = 'widgets';
+COMMIT;
+```
+
+### Session 1 — re-read in the same transaction
+
+```sql
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 200  <- the value changed mid-transaction!
+COMMIT;
+```
+
+The same query returned `100`, then `200`, within one transaction.
+
+## Takeaway
+
+Under READ COMMITTED a value is not stable within a transaction; every statement sees the latest committed data. If your logic reads, computes, then writes, an interleaved commit can change what you read out from under you. Use [Repeatable Read](/demos/02-repeatable-read) for a stable snapshot, or [`SELECT ... FOR UPDATE`](/demos/05-for-update) to lock specific rows.

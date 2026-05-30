@@ -1,0 +1,73 @@
+---
+title: "Demo 3: Write Skew"
+description: Two transactions read overlapping data and write disjoint rows, violating a multi-row invariant. Repeatable Read can't catch it.
+---
+
+# Demo 3: Write Skew — The Anomaly Repeatable Read Can't Catch
+
+**Isolation level:** Repeatable Read
+**Source:** `sql/03_write_skew.sql`
+**Interactive version:** `/start-3`
+
+## The anomaly
+
+A hospital requires that **at least one doctor be on call** at all times. Alice and Bob are both on call. Each, simultaneously, checks "is another doctor still on call?", sees yes, and takes themselves off call. Both commit. Result: **nobody is on call** — invariant violated.
+
+**REPEATABLE READ does not prevent this.** Each transaction's snapshot shows the *other* doctor on call, so each update looks safe in isolation. They write to *different rows*, so there's no row-level conflict to detect — and RR only catches conflicts on the same row.
+
+## Setup
+
+```bash
+./scripts/reset.sh
+```
+
+Both Alice (id 1) and Bob (id 2) start with `on_call = true`. Treat **Session 1 as Alice** and **Session 2 as Bob**.
+
+## Walkthrough
+
+### Session 1 (Alice) — open RR and read
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT count(*) AS doctors_on_call FROM doctors WHERE on_call;
+-- EXPECT: 2
+```
+
+### Session 2 (Bob) — open RR and read
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT count(*) AS doctors_on_call FROM doctors WHERE on_call;
+-- EXPECT: 2
+```
+
+### Session 1 (Alice) — check for others, then go off call
+
+```sql
+SELECT count(*) FROM doctors WHERE on_call AND id <> 1;
+-- EXPECT: 1  (Bob still on call from Alice's POV)
+UPDATE doctors SET on_call = false WHERE id = 1;
+COMMIT;
+```
+
+### Session 2 (Bob) — the symmetric move
+
+```sql
+SELECT count(*) FROM doctors WHERE on_call AND id <> 2;
+-- EXPECT: 1  (Bob's snapshot still shows Alice on call)
+UPDATE doctors SET on_call = false WHERE id = 2;
+COMMIT;  -- SUCCEEDS — different rows, no row-level conflict
+```
+
+The crucial point: **Bob's commit succeeds**, with no error.
+
+### Either session — inspect the damage
+
+```sql
+SELECT count(*) AS doctors_on_call FROM doctors WHERE on_call;
+-- EXPECT: 0  <- nobody is on call. Invariant violated.
+```
+
+## Takeaway
+
+Repeatable Read prevents non-repeatable reads and same-row lost-update conflicts, but not write skew. To fix it, either use [Serializable](/demos/04-serializable) (which detects the dangerous dependency) or explicitly lock the read with [`SELECT ... FOR UPDATE`](/demos/05-for-update) so the second transaction blocks instead of running on a stale snapshot.

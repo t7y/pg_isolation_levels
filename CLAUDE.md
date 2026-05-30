@@ -29,12 +29,26 @@ A self-contained sandbox for running interactive demos that illustrate PostgreSQ
 │   ├── 05_for_update.sql       # Demo 5: RC + FOR UPDATE escape hatch
 │   ├── 06_balance_transfer.sql # Demo 6: balance race condition
 │   └── reset.sql               # Resets all demo tables to initial state
-└── scripts/
-    ├── psql.sh                 # Opens a psql session against the container
-    └── reset.sh                # Convenience wrapper for sql/reset.sql
+├── scripts/
+│   ├── psql.sh                 # Opens a psql session against the container
+│   └── reset.sh                # Convenience wrapper for sql/reset.sql
+├── .cursor/                    # Interactive in-Cursor walkthrough (see below)
+│   ├── rules/course-instructor.mdc  # Always-on instructor persona
+│   ├── SCRIPT_INSTRUCTIONS.md       # Verbatim teaching-script rules (STOP/ACTION/USER)
+│   └── commands/                    # /start-setup, /start-1 … /start-6 slash commands
+├── lessons/                    # Teaching scripts the slash commands load
+│   ├── 00-setup/SCRIPT.md
+│   └── 01-read-committed/ … 06-balance-transfer/SCRIPT.md
+└── website/                    # Nextra reference site (browsable handbook of the demos)
 ```
 
 Each demo file is annotated with `-- SESSION 1` and `-- SESSION 2` markers indicating which session should run which block, and in what order.
+
+## Interactive walkthrough (the `.cursor/` + `lessons/` layer)
+
+The repo doubles as a self-teaching course inside Cursor. A learner types `/start-setup` then `/start-1` … `/start-6`; the always-on rule in `.cursor/rules/course-instructor.mdc` puts the AI in "instructor" mode, each slash command loads the matching `lessons/<n>/SCRIPT.md`, and the AI follows that script verbatim per `.cursor/SCRIPT_INSTRUCTIONS.md`.
+
+**Guide-only, two-terminal model:** because the demos need two `psql` sessions held open across turns, the instructor never runs the interleaved SQL itself. It relays the exact statements from the `sql/` files (the single source of truth), tells the learner which session to paste into (Terminal 1 = Session 1, Terminal 2 = Session 2), and STOPs to wait for the observed output before continuing. The only commands the instructor may run itself are non-interactive one-shots (`docker compose up -d`, `./scripts/reset.sh`, etc.). When editing the teaching scripts, keep SQL relayed from `sql/` rather than duplicated, so the two stay in sync.
 
 ## Quick Start
 
