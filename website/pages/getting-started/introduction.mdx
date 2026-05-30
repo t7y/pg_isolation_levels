@@ -1,0 +1,57 @@
+---
+title: Isolation Levels Primer
+description: A quick primer on PostgreSQL's Read Committed, Repeatable Read, and Serializable isolation levels and the anomalies each prevents.
+---
+
+# Isolation Levels Primer
+
+Transaction isolation defines how concurrent transactions are allowed to affect one another. The SQL standard frames it in terms of which **anomalies** are permitted. PostgreSQL implements three distinct levels (it treats the standard's fourth, "Read Uncommitted", the same as Read Committed).
+
+## The anomalies
+
+- **Non-repeatable read** — you read a row, another transaction commits a change, you read again in the *same* transaction and see a different value. (Demo 1)
+- **Lost update / write conflict** — two transactions read a row and both write it; one update is silently lost, or the engine refuses the second write. (Demo 2)
+- **Write skew** — two transactions read overlapping data, then write to *different* rows in a way that violates an invariant spanning multiple rows. No single-row conflict exists, so it slips past snapshot isolation. (Demo 3)
+
+## The three levels
+
+### Read Committed (the default)
+
+Each **statement** sees a fresh snapshot of the latest committed data. You never see uncommitted ("dirty") data, but the picture can shift *between statements* within one transaction. Cheap and the right default for most workloads — but read-compute-write logic is exposed to non-repeatable reads.
+
+### Repeatable Read
+
+The transaction takes **one snapshot at its first statement** and uses it for every subsequent read. Concurrent commits become invisible — no non-repeatable reads. If you then try to `UPDATE` a row that a concurrent transaction already committed a change to, Postgres aborts with:
+
+```text
+ERROR:  could not serialize access due to concurrent update
+SQLSTATE: 40001
+```
+
+Repeatable Read still does **not** prevent write skew, because write skew involves disjoint rows with no direct conflict.
+
+### Serializable (SSI)
+
+PostgreSQL implements Serializable via **Serializable Snapshot Isolation**. On top of the Repeatable Read snapshot, SSI tracks **predicate reads** — which rows your `WHERE` clauses depended on. If it detects a pattern of read/write dependencies that could not occur in any serial ordering, it aborts one transaction:
+
+```text
+ERROR:  could not serialize access due to read/write dependencies among transactions
+SQLSTATE: 40001
+HINT:  The transaction might succeed if retried.
+```
+
+This makes your logic correct *as if* transactions ran one at a time — the price is that your application must catch `40001` and retry.
+
+## Summary
+
+| Level | Snapshot scope | Non-repeatable reads | Write skew | On conflict |
+|---|---|---|---|---|
+| Read Committed | Per statement | Possible | Possible | (no abort) |
+| Repeatable Read | Per transaction | Prevented | Possible | `40001` on same-row write |
+| Serializable | Per transaction + predicates | Prevented | Prevented | `40001` on dependency cycle |
+
+## The escape hatch: `SELECT ... FOR UPDATE`
+
+You don't always need Serializable. `SELECT ... FOR UPDATE` takes a **row-level lock**: other writers and other `FOR UPDATE` readers block until you commit. It serializes access to specific "source of truth" rows with no retry loop, and works fine at Read Committed. The trade-off is reduced throughput on hot rows and the risk of deadlocks. (Demos 5 and 6)
+
+Next: [set up the environment](/getting-started/setup), then work through the [demos](/demos/01-read-committed).

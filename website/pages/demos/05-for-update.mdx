@@ -1,0 +1,79 @@
+---
+title: "Demo 5: SELECT ... FOR UPDATE"
+description: Pessimistic row locking under Read Committed serializes access to a row without using Serializable.
+---
+
+# Demo 5: SELECT ... FOR UPDATE — The Pessimistic Locking Escape Hatch
+
+**Isolation level:** Read Committed
+**Source:** `sql/05_for_update.sql`
+**Interactive version:** `/start-5`
+
+## The idea
+
+Sometimes you don't want to bump everything up to Serializable and write retry loops. You just want: "I'm about to read this row, decide what to do, and write it back — nobody else touch it until I'm done." That's **`SELECT ... FOR UPDATE`**.
+
+`FOR UPDATE` takes a **row-level lock** that blocks other writers and other `FOR UPDATE` readers until the transaction commits or rolls back. Plain `SELECT`s are unaffected.
+
+## Setup
+
+```bash
+./scripts/reset.sh
+```
+
+`widgets` starts at 100.
+
+## Walkthrough
+
+### Session 1 — take the lock
+
+```sql
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT value FROM counters WHERE name = 'widgets' FOR UPDATE;
+-- EXPECT: 100  (the row is now locked for the rest of this txn)
+```
+
+### Session 2 — try to take the same lock; this BLOCKS
+
+```sql
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT value FROM counters WHERE name = 'widgets' FOR UPDATE;
+-- psql appears to hang — that's the lock wait, not a freeze.
+```
+
+It will unblock as soon as Session 1 commits or rolls back.
+
+### Session 1 — read-modify-write and commit
+
+```sql
+UPDATE counters SET value = value + 50 WHERE name = 'widgets';
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 150
+COMMIT;
+```
+
+### Session 2 — unblocks with the fresh value
+
+The `SELECT` from the previous step now returns immediately:
+
+```sql
+-- EXPECT: 150  <- the value Session 1 just committed, NOT a stale 100
+```
+
+Under Read Committed, when a `FOR UPDATE` wait ends, Postgres re-fetches the latest committed row. (Under Repeatable Read this same situation would instead raise `SQLSTATE 40001` here.) Session 2 can now safely do its own update:
+
+```sql
+UPDATE counters SET value = value - 30 WHERE name = 'widgets';
+SELECT value FROM counters WHERE name = 'widgets';
+-- EXPECT: 120
+COMMIT;
+```
+
+## Takeaway
+
+`FOR UPDATE` is a pessimistic lock: contending writers wait instead of racing.
+
+- **Pros:** simple to reason about, no retry loops, works at plain Read Committed.
+- **Cons:** serializes traffic on hot rows (throughput suffers), can deadlock if locks are taken in inconsistent order, and long-held locks block everyone behind them.
+
+Rule of thumb: if you have a small number of clearly-defined "source of truth" rows you're about to update, `FOR UPDATE` is often simpler and faster than Serializable retries. See it applied to money in the [balance transfer demo](/demos/06-balance-transfer).

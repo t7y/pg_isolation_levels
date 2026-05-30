@@ -1,0 +1,29 @@
+:root {
+  --nextra-primary-hue: 145deg;
+  --nextra-primary-saturation: 44%;
+  --nextra-primary-lightness: 35%;
+}
+
+/* Code blocks and inline code in monospace */
+code,
+pre {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Courier New', monospace;
+}
+
+/* Tighten list spacing */
+.nextra-content ul,
+.nextra-content ol {
+  margin-top: 0.5rem;
+}
+
+.nextra-content ul > li,
+.nextra-content ol > li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Enable word-wrap for long lines in code blocks */
+pre code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

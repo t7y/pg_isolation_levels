@@ -1,0 +1,92 @@
+---
+title: Environment Setup
+description: Bring up PostgreSQL in Docker and open two psql sessions to run the isolation demos.
+---
+
+# Environment Setup
+
+Everything runs in a single Dockerized PostgreSQL 16 container. You'll open **two** `psql` sessions so you can interleave transactions.
+
+## Prerequisites
+
+- Docker & Docker Compose
+
+## Start PostgreSQL
+
+From the repo root:
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+Wait for the healthcheck to pass (the container is named `pg-isolation-lab`). You can check with:
+
+```bash
+docker compose ps
+```
+
+The container mounts the repo's `sql/` directory read-only at `/sql`, so inside `psql` you can load any file with `\i /sql/...`.
+
+## Open two psql sessions
+
+Open **two** terminals. In each, from the repo root:
+
+```bash
+# Terminal 1  -> Session 1
+./scripts/psql.sh
+
+# Terminal 2  -> Session 2
+./scripts/psql.sh
+```
+
+You'll know it worked when each shows a prompt like `isolation_lab=#`. Throughout the demos:
+
+- **Terminal 1 = Session 1**
+- **Terminal 2 = Session 2**
+
+## Create the schema and seed data
+
+Run once, in either session:
+
+```sql
+\i /sql/00_setup.sql
+```
+
+This creates three tables used across all demos:
+
+- **`counters`** — key/value pairs (`hits = 0`, `widgets = 100`). Used for non-repeatable reads and write conflicts.
+- **`doctors`** — Alice and Bob, both `on_call = true`. Used for the write-skew "at least one doctor on call" invariant.
+- **`accounts`** — Alice (`100.00`) and Bob (`0.00`), with a `CHECK (balance >= 0)` constraint. Used for the balance-transfer race.
+
+## Reset between demos
+
+Each demo should start from the clean baseline. Reset from a non-psql shell:
+
+```bash
+./scripts/reset.sh
+```
+
+…or from inside either session:
+
+```sql
+\i /sql/reset.sql
+```
+
+This truncates and reseeds all three tables.
+
+## Watching statements arrive
+
+The container runs with `log_statement=all`, so you can watch the interleaving order of statements as they reach the server:
+
+```bash
+docker compose logs -f postgres
+```
+
+## Teardown
+
+```bash
+docker compose down -v
+```
+
+Ready? Start with [Demo 1: Read Committed](/demos/01-read-committed).

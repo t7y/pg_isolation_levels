@@ -1,0 +1,92 @@
+---
+title: "Demo 4: Serializable"
+description: Serializable Snapshot Isolation detects the read/write dependency cycle from the write-skew demo and aborts one transaction with SQLSTATE 40001.
+---
+
+# Demo 4: Serializable — SSI Catches the Write-Skew Cycle
+
+**Isolation level:** Serializable
+**Source:** `sql/04_serializable.sql`
+**Interactive version:** `/start-4`
+
+## The fix
+
+PostgreSQL implements SERIALIZABLE via **Serializable Snapshot Isolation (SSI)**. Like Repeatable Read, each transaction sees a snapshot — but SSI also tracks **predicate reads** (which rows your `WHERE` clauses depended on). If at commit time it detects a read/write dependency pattern that couldn't have happened in any serial order, it aborts one transaction with `SQLSTATE 40001`.
+
+We replay the exact doctors-on-call scenario from [demo 3](/demos/03-write-skew). The first commit succeeds; the second hits a serialization failure and must retry. The invariant is preserved.
+
+## Setup
+
+```bash
+./scripts/reset.sh
+```
+
+Session 1 = Alice, Session 2 = Bob.
+
+## Walkthrough
+
+### Session 1 — open SERIALIZABLE and read
+
+```sql
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+SELECT count(*) FROM doctors WHERE on_call;
+-- EXPECT: 2
+```
+
+### Session 2 — open SERIALIZABLE and read
+
+```sql
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+SELECT count(*) FROM doctors WHERE on_call;
+-- EXPECT: 2
+```
+
+### Session 1 (Alice) — go off call and commit
+
+```sql
+SELECT count(*) FROM doctors WHERE on_call AND id <> 1;
+-- EXPECT: 1
+UPDATE doctors SET on_call = false WHERE id = 1;
+COMMIT;  -- succeeds (first writer wins)
+```
+
+### Session 2 (Bob) — try the same
+
+```sql
+SELECT count(*) FROM doctors WHERE on_call AND id <> 2;
+-- EXPECT: 1
+UPDATE doctors SET on_call = false WHERE id = 2;
+COMMIT;
+-- EXPECT: ERROR  could not serialize access due to read/write
+--         dependencies among transactions
+--         SQLSTATE 40001
+--         HINT: The transaction might succeed if retried.
+```
+
+The failure may surface on the `UPDATE` or on the `COMMIT`, depending on what SSI's dependency tracker decides — either way the transaction must roll back and retry.
+
+### Session 2 — retry; now it sees reality
+
+```sql
+ROLLBACK;  -- safe even if already aborted
+
+BEGIN ISOLATION LEVEL SERIALIZABLE;
+SELECT count(*) FROM doctors WHERE on_call;
+-- EXPECT: 1  (Alice already off call)
+COMMIT;
+```
+
+The retry sees only one doctor on call, so the application logic correctly declines to take Bob off call.
+
+### Either session — verify
+
+```sql
+SELECT count(*) AS doctors_on_call FROM doctors WHERE on_call;
+-- EXPECT: 1  <- Bob is still on call. Invariant preserved.
+```
+
+## Takeaway
+
+Serializable makes your application logic correct *as if* every transaction ran one at a time, with no extra locks in your code. The price: your code **must** handle `SQLSTATE 40001` by retrying. It's opt-in per transaction, so many apps use it only for the handful of paths with non-trivial invariants.
+
+For a lock-based alternative with no retries, see [`SELECT ... FOR UPDATE`](/demos/05-for-update).
